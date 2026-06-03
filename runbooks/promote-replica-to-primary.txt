@@ -1,0 +1,15 @@
+Promoting a replica node from standby to main (Tested on PostgreSQL 14 - Result: PASSED)
+
+In version 12 use: PostgreSQL 12 is also able to promote the database from slave to master using plain SQL: SELECT pg_promote();
+
+Step 1: On both the master and the standby server, shut down the PostgreSQL service
+/usr/pgsql-14/bin/pg_ctl -D /u01/postgres14 -l logfile stop
+
+Step 2: Start the PostgreSQL service on the standby server and promote it using the below command
+
+ (Or) /usr/pgsql-14/bin/pg_ctl -D /u01/postgres14 promote
+
+Step 3: Connect to the standby server using a PostgreSQL client, to check that the database is present
+Step 4: Change the postgresql.auto.conf in the new master node (Remove the conn_info conigurations that have the replication properties)
+
+Step 5: Once the promotion is successful, you can reconfigure the other replicas to connect to the new master server and start replicating from it.

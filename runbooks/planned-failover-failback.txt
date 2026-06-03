@@ -1,0 +1,147 @@
+-----Before performing the switch, servers must be checked and prepared.
+-----Let’s see how to failover/failback properly a PostgreSQL server for a scheduled maintenance on 
+the primary server without loosing any transaction and without any need to rebuild
+
+------The procedure below is only valid for PostgreSQL versions 9, 10 and 11. For versions 12 and onwards,
+ the procedure is slightly different and not covered here.
+ 
+ -------In advance, on the primary server, set the parameter hot_standby to on (this parameter is ignored when it is a primary server).
+ : postgresql.conf
+hot_standby = on
+
+----Preparing the standby server  to become a primary server
+On the standby server, check the parameters needed to act as a primary server are appropriately set (minimal values…) :
+listen_addresses = '*'
+wal_level = replica
+max_wal_senders = 3
+max_replication_slots = 3
+-----If some of these static parameters have to be adjusted, modify the values and eventually restart the standby server (optional) :
+pg_ctl restart -D $CFG  where $CFG  is the data directory
+
+--------Check the used replication role is defined in the standby server authentication file pg_hba.conf
+ with the IP address of the current primary server, this entry will allow connections from Primary Server 
+ when this one becomes a standby server in a future step.
+ --check on secodary server 
+ pg_hba.conf
+ host    replication     replica          ${PRIMARY_SERVER_IP}/32        md5
+ Reload the configuration if the entry had to be added 
+ su - postgres
+ /usr/pgsql-10/bin/pg_ctl reload -D /U01/postgres10
+ 
+ -----Failover
+ Failover - Step 1 : Stop the applications, backup the database and then stop the database on primary server 
+ --to stop the database
+ su - postgres
+ /usr/pgsql-10/bin/pg_ctl stop -D /U01/postgres10
+ --At this stage, deactive all scripts that could restart the database on Primary Server (startup shell scripts…). 
+ The maintenance can now be performed on the Primary server
+ 
+ ----Failover - Step 2 Promote the standby server to primary server 
+ Use pg_ctl promote to promote the standby server VPSFRSQLPAC2 to primary server
+ 
+ su - postgres
+ /usr/pgsql-10/bin/pg_ctl promote -D /U01/postgres10
+ Check the log file :
+ A new timeline id is applied when promoting. "selected new timeline ID: 2" in the log file.
+ ----The file recovery.conf in the directory $PGDATA is renamed to recovery.done 
+ when the command pg_ctl promote has run
+ 
+ ----When the switch to Replica server is performed for the first time, 
+ the replication slot standby1 does not exist ($PGDATA/pg_replslot).
+ 
+ --- to check ;
+ select slot_name, restart_lsn from pg_replication_slots;
+ AND HERE YOU WILL NEVER FIND A REPLICATION SLOT
+ ---In this context, create immediately an active replication slot standby1 on the new primary server :
+ 
+ select * from pg_create_physical_replication_slot('standby1',true); 
+ 
+ The former standby server is now the primary server.
+ Failover - Step 3 : Switch applications to the new primary server
+ 
+ Failover - Step 4 : Convert the former primary server to standby server
+ 
+  The former primary server  is now back, maintenance task is completed.
+ ---- At this stage, do not start the database, a configuration must be performed !
+ 
+ On the former primary server, create a file recovery.conf in the directory $PGDATA.
+ 
+ standby_mode = 'on'
+primary_conninfo = 'user=replica password=Admin@@321 host=10.20.1.25 port=5432 application_name =sync_replication  '
+
+primary_slot_name = 'standby1'
+recovery_target_timeline = 'latest'
+
+   The standby mode is set to on.
+	 Connection informations to the primary server  are stored in the parameter primary_conninfo
+	 
+		Replication slot name previously recreated on VPSFRSQLPAC2 is obviously specified (primary_slot_name).
+
+The parameter recovery_target_timeline is set to latest : this is an important information as the timeline has changed from 1 to 2 on the newly primary server. 
+If not set to latest, recovery does not automatically switch to the new timeline id.
+
+When the file recovery.conf is properly defined, start the former primary server,
+ check log file and test replication.
+
+ su - postgres
+ /usr/pgsql-10/bin/pg_ctl start -D /U01/postgres10
+ now the server becomes the standby server, the  Automatic database startup scripts can be reactivated 
+ 
+ 
+ -----Failback
+ About the failback procedure, it will be similar to the failover procedure
+ ---Failback - Step 1 : Stop the applications, backup and stop the database on primary server
+ su - postgres
+ /usr/pgsql-10/bin/pg_ctl stop -D /U01/postgres10
+ Deactive all scripts that could restart the database on the primary server
+ 
+------ Failback - Step 2 : Promote the standby server to primary server
+Use pg_ctl promote to promote the standby server  to primary server.
+
+  su - postgres
+ /usr/pgsql-10/bin/pg_ctl promote -D /U01/postgres10
+ 
+ The timeline id is incremented by 1 when promoting. "selected new timeline ID: 3" in the log file.
+The file recovery.conf in the directory $PGDATA is renamed to recovery.done by pg_ctl promote.
+
+ be sure that recovery.conf file is owned by postgres user
+ 
+ When the failback to Primary server again is performed, the replication slot standby1 already exists ($PGDATA/pg_replslot),
+ but this one is obsolete as it was the replication slot before the switch to the Replica.
+ 
+ ---select slot_name, restart_lsn from pg_replication_slots ;
+ 
+ Recreate immediately an active replication slot standby1 on the new primary server :
+ 
+ ----select * from pg_drop_replication_slot('standby1');
+ ---select * from pg_create_physical_replication_slot('standby1',true);
+ 
+the old primary server becomes again the new Primary Server
+
+--Failback - Step 3 : Switch applications to the primary server
+---Failback - Step 4 : Convert the stoped old Primary Server to standby server
+At this stage, do not start the database on the old Primary Server
+
+rename the file recovery.done to recovery.conf in the directory $PGDATA. Add the parameter recovery_target_timeline defined to latest
+ if this parameter was not existing in the original file recovery.conf, 
+ otherwise the switch to timeline ID 3 won’t be automatically performed during recovery.
+ 
+ When the file recovery.conf is properly defined, start the database on Old primary,
+  check log file and test replication. At startup, old primary treats WAL files coming from Primary Server since its promotion to primary status
+   and it becomes again the standby server.
+   
+   
+
+
+ Automatic database startup scripts can be reactivated on Standby Server.
+Situation is back to normal
+
+ ____________________________________________________________
+ VConclusion
+Scheduled failover/failback procedures with PostgreSQL streaming replication are very easy. Assuming there is enough space disk for WAL files retention during the failover/failback tasks,
+ managing the steps and the replication slot guarantee consistency, no data loss and most of all there is no need for a full rebuild requiring database backup/restore or other painful methods (pg_rewind…)
+ 
+Through this use case, it seems to be a good practice to (re)create the active replication slot as soon as the standby server is promoted to primary role.
+If there is not enough disk space for WAL files retention during the maintenance task, the procedure is slightly different and not covered here but in few words : the archive log mode must be active and each standby PostgreSQL server is able to read archive logs generated by its primary server.
+
+___________________________________________________________________________________________________________________ 
