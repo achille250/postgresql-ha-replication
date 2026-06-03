@@ -68,9 +68,3 @@ Prerequisites: replication role on primary, `pg_hba.conf` entry for replica IP, 
 | [postgresql-security-rbac](https://github.com/achille250/postgresql-security-rbac) | RBAC, RLS, audit |
 | [postgresql-performance-tuning](https://github.com/achille250/postgresql-performance-tuning) | Indexes, EXPLAIN |
 | [postgresql-data-migration](https://github.com/achille250/postgresql-data-migration) | dblink migration |
-
----
-
-## License
-
-MIT — see [LICENSE](LICENSE).
