@@ -1,0 +1,1 @@
+pg_basebackup -h CHANGE_ME_HOST  -D /u01/postgres15 -U replica -Fp -v -R -X stream -C -S north_replica_01

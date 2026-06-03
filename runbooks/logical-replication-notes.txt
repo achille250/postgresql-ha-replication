@@ -6,13 +6,13 @@ CREATE EXTENSION IF NOT EXISTS pglogical;
 -- Register node
 SELECT pglogical.create_node(
   node_name := 'primary_node',
-  dsn := 'host=${PRIMARY_HOST} dbname=dsaccokigali_db user=pglogical password=pglogical'
+  dsn := 'host=${PRIMARY_HOST} dbname=dsaccokigali_db user=pglogical password=CHANGE_ME'
 );
 
 -- Add all tables in schema 'public' (or specific schemas if needed)
 SELECT pglogical.replication_set_add_all_tables('default', ARRAY['public']);
 
-Step 2. Configure Replica (10.90.16.8)
+Step 2. Configure Replica (CHANGE_ME_HOST)
 this will subscribe to the primary and also act as a provider later.
 -- Enable pglogical
 CREATE EXTENSION IF NOT EXISTS pglogical;
@@ -20,17 +20,17 @@ CREATE EXTENSION IF NOT EXISTS pglogical;
 -- Register replica node
 SELECT pglogical.create_node(
   node_name := 'replica_node',
-  dsn := 'host=10.90.16.8 dbname=dsaccokigali_db user=pglogical password=pglogical'
+  dsn := 'host=CHANGE_ME_HOST dbname=dsaccokigali_db user=pglogical password=CHANGE_ME'
 );
 
 -- Subscribe to primary
 SELECT pglogical.create_subscription(
   subscription_name := 'sub_from_primary',
-  provider_dsn := 'host=${PRIMARY_HOST} dbname=dsaccokigali_db user=pglogical password=pglogical'
+  provider_dsn := 'host=${PRIMARY_HOST} dbname=dsaccokigali_db user=pglogical password=CHANGE_ME'
 );
 
-Step 3. Configure Subscriber (10.50.4.10)
-This will subscribe to the replica (10.90.16.8).
+Step 3. Configure Subscriber (CHANGE_ME_HOST)
+This will subscribe to the replica (CHANGE_ME_HOST).
 
 -- Enable pglogical
 CREATE EXTENSION IF NOT EXISTS pglogical;
@@ -38,13 +38,13 @@ CREATE EXTENSION IF NOT EXISTS pglogical;
 -- Register subscriber node
 SELECT pglogical.create_node(
   node_name := 'subscriber_node',
-  dsn := 'host=10.50.4.10 dbname=dsacco_bnr user=pglogical password=pglogical'
+  dsn := 'host=CHANGE_ME_HOST dbname=dsacco_bnr user=pglogical password=CHANGE_ME'
 );
 
 -- Subscribe to replica
 SELECT pglogical.create_subscription(
   subscription_name := 'cdc_subscription',
-  provider_dsn := 'host=10.90.16.8 dbname=dsaccokigali_db user=pglogical password=pglogical',
+  provider_dsn := 'host=CHANGE_ME_HOST dbname=dsaccokigali_db user=pglogical password=CHANGE_ME',
   replication_sets := ARRAY['default'],
   synchronize_structure := false,  -- don’t copy DDL
   synchronize_data := true         -- copy initial data

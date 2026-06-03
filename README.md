@@ -1,4 +1,4 @@
-﻿# postgresql-ha-replication
+# postgresql-ha-replication
 
 Streaming replication, failover/failback, pgpool & FDW setup
 

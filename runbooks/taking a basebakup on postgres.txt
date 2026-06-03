@@ -1,0 +1,81 @@
+pg_basebackup -h 192.168.4.240 -D /u02/basebackup -U replica -P -v -R -X stream
+
+
+--- taking a base bakup on from remote server(this can be used when you are in replication for example) -- for only backup you can ignore -R for not making a recovery.conf file
+pg_basebackup -D  /var/lib/pgsql/10/data -h 192.168.43.177 -p 5432 -U replica -X stream –R --format=t -P 
+eg: pg_basebackup -D  /Postgres/basebacups/$(date +%Y-%m-%d-%H-%m) -h CHANGE_ME_HOST -p 5432 -U postgres -X stream  --format=t -P
+
+
+___________________
+-R to create the recovery.conf file
+tar –xf  base.tar is used to extract the backup
+--------------------------------------------
+---------You can add /$(date +%Y-%m-%d-%H-%m-%s) if you need to know the excact time the backup was taken
+pg_basebackup -D /opt/basebackup/$(date +%Y-%m-%d-%H-%m-%s) -Ft –z -R 
+
+        --- you can use this date format also:`date "+%Y-%m-%d_%H:%M"`
+--- you can add a trusted user on both server for not asking password especialy in automated script
+
+---automate the script 
+ pg_basebackup -D  /U02/basebacups/$(date +%Y-%m-%d-%H-%m)  -U postgres -X stream  -Ft
+ 
+pg_basebackup -D  /Postgres/basebacups/`date "+%Y-%m-%d_%H:%M"` -h CHANGE_ME_HOST -p 5432 -U postgres -X stream  --format=t -P
+ 
+ do as done on ldap
+ _____________________________________________________________________________________________________________________
+ 
+ pg_basebackup -D  /U02/base/$(/bin/date  +\%Y-\%m-\%d-\%H:\%M) -U postgres -X stream  -Ft
+ 
+  pg_basebackup -D  /U02/basebackups/$(/bin/date  +\%Y-\%m-\%d-\%H:\%M) -U postgres -X stream  -Ft
+  
+  --- you can use another user which is not postgres.. like replication user.
+ 
+ _______________________________________________________________________________
+ 
+ ----- starting a base backup and by applying wall files
+ *******The files that we need to consider for our recovery are :
+
+backup_label
+tablespace_map
+-------------------------------
+When you open the backup_label file, we see the start WAL location, backup start time, etc.
+ These are some details that help us perform a point-in-time-recovery.
+ ------------------------
+ *******Extract pg_wal.tar.gz from backup to pg_wal directory of the new data directory.
+ 
+ _______ IF YOU DON'T DO THE ABOVE YOU THE SERVER CAN'T KNOW THE CHECK POINT WHILE PERFORMING RESTORE
+ 
+ 
+ ****Create recovery.conf to specify the time until when you wish to perform a point-in-time-recovery
+ 
+ *******Once all of the steps above are complete you can start PostgreSQL.
+**********You should see the following files renamed after recovery
+
+
+********original file before recovery --> renamed file after recoveryShell
+              backup_label   --> backup_label.old
+              tablespace_map --> tablespace_map.old
+               recovery.conf  --> recovery.done
+
+ 
+ 
+ 1) extract the base backup at a given directory and  give postgres user access to that directory
+ su - postgres
+/usr/pgsql-10/bin/pg_ctl -D /var/lib/pgsql/10/data/ stop   if another instance is running
+
+ tar –xf  base.tar
+ chown postgres:postgres Directoryname
+ #create a script recovery.conf under the location of the backup directory
+ vi recovery.conf
+ #add the following script to copy the transaction logs
+ restore_command='cp /home/postgres/archive/%f %p'
+recovery_target_time='2020-11-17 10:5:3'   -------   if the target time is not specified the online backup will restore the fullbackup til last recorded transaction
+------- 
+---start the server in the backup location where recovery.conf is located
+su - postgres
+/usr/pgsql-10/bin/pg_ctl -D /opt/basebackup start
+-------When the restore is done the recovery.conf is named to  recovery.done
+____________________________________________________________________________________________________
+
+
+ 

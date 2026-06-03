@@ -1,0 +1,66 @@
+---- 1. Configure the Publisher (Primary Server)
+
+Implementation Steps
+1. Configure the Publisher (Primary Server)
+
+-- Enable necessary parameters in postgresql.conf
+wal_level = logical             # Must be 'logical' for logical replication
+max_replication_slots = 10      # Sufficient slots for your needs
+max_wal_senders = 10           # Enough sender processes
+
+-- Create a physical replication slot for your logical replication
+SELECT * FROM pg_create_physical_replication_slot('logical_replication_slot');
+
+2. Set Up Logical Replication with Slot Persistence
+
+-- Create publication on publisher
+CREATE PUBLICATION bnr_insert FOR ALL TABLES;  ---CREATE FOR SPECIFIC TABLES IF YOU NEED
+
+-- On subscriber, create subscription with the replication slot
+
+CREATE SUBSCRIPTION bnr_subscription
+CONNECTION 'host=CHANGE_ME_HOST port=5432 dbname=dsaccokigali_db user=pglogical
+password=CHANGE_ME'
+PUBLICATION bnr_insert;
+WITH (
+  slot_name = 'logical_replication_slot',  -- Use your physical slot
+  copy_data = true,
+  create_slot = false                     -- Important! We're using existing slot
+);
+
+3. Verify the Configuration
+
+-- On publisher, check slot status
+SELECT slot_name, slot_type, active, restart_lsn, confirmed_flush_lsn 
+FROM pg_replication_slots;
+
+-- On subscriber, check subscription status
+SELECT * FROM pg_stat_subscription;
+
+Benefits of This Approach
+Persistence: The physical slot ensures WAL retention even if the subscriber disconnects
+
+Automatic Recovery: Replication can resume from the last known position
+
+Data Safety: Prevents data loss during network issues
+
+Monitoring: Easier to track replication progress
+
+Important Considerations
+Disk Space: Physical slots will retain WAL files indefinitely if subscriber is down
+
+Monitor with pg_replication_slots view
+
+Set up alerts for growing WAL volume
+
+Failover Handling:
+
+Physical slots aren't automatically transferred to standby servers
+
+Consider using pg_replication_slot_advance() after failover
+
+Cleanup:
+
+
+-- To safely remove the slot when no longer needed
+SELECT pg_drop_replication_slot('logical_replication_slot');
